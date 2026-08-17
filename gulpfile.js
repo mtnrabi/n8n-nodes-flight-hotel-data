@@ -1,0 +1,17 @@
+const path = require('path');
+const { task, src, dest } = require('gulp');
+
+task('build:icons', copyIcons);
+
+function copyIcons() {
+	// Icons plus the codex (*.node.json) files, which tsc does not emit.
+	const nodeSource = path.resolve('nodes', '**', '*.{png,svg,node.json}');
+	const nodeDestination = path.resolve('dist', 'nodes');
+
+	src(nodeSource).pipe(dest(nodeDestination));
+
+	const credSource = path.resolve('credentials', '**', '*.{png,svg}');
+	const credDestination = path.resolve('dist', 'credentials');
+
+	return src(credSource).pipe(dest(credDestination));
+}

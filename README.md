@@ -1,0 +1,258 @@
+# n8n-nodes-flight-hotel-data
+
+An [n8n](https://n8n.io/) community node for real-time flight fares and hotel
+prices, served by the RapidAPI Flight & Hotel Data APIs.
+
+One node, two resources, four operations: one-way flight search, round-trip
+flight search, hotel destination search, and hotel-by-name lookup.
+
+> **Not affiliated.** This is an independent API that returns publicly
+> available flight and hotel pricing. It is not affiliated with, endorsed by,
+> or sponsored by Google or Booking.com.
+
+[Installation](#installation) · [Credentials](#credentials) ·
+[Operations](#operations) · [Working with the results](#working-with-the-results) ·
+[Compatibility](#compatibility) · [Development](#development) · [License](#license)
+
+---
+
+## Installation
+
+Unverified community nodes install on **self-hosted n8n only**. They are not
+available on n8n Cloud.
+
+### From the n8n editor
+
+1. Go to **Settings > Community nodes**.
+2. Select **Install**.
+3. Enter `n8n-nodes-flight-hotel-data`.
+4. Agree to the risks of using community nodes and select **Install**.
+
+### Manually
+
+```bash
+cd ~/.n8n/nodes
+npm install n8n-nodes-flight-hotel-data
+```
+
+Restart n8n. The node appears in the nodes panel as **Flight & Hotel Data**.
+
+Full n8n guide: <https://docs.n8n.io/integrations/community-nodes/installation-and-management>
+
+---
+
+## Credentials
+
+The node uses one credential, **RapidAPI Flight & Hotel Data API**, holding a
+single field: your RapidAPI key.
+
+1. Create a RapidAPI account and subscribe to the API(s) you need:
+   - Flights: <https://rapidapi.com/mtnrabi/api/google-flights-live-api>
+   - Hotels: <https://rapidapi.com/mtnrabi/api/booking-live-api>
+2. Copy your key from the RapidAPI dashboard.
+3. In n8n, create a new **RapidAPI Flight & Hotel Data API** credential and
+   paste the key (shown here as the placeholder `YOUR_RAPIDAPI_KEY`).
+
+The key is sent as the `x-rapidapi-key` header. The node sets the matching
+`x-rapidapi-host` header per operation, because flights and hotels live on
+different hosts:
+
+| Resource | Host |
+| --- | --- |
+| Flight | `google-flights-live-api.p.rapidapi.com` |
+| Hotel | `booking-live-api.p.rapidapi.com` |
+
+The same key works for both. There is no separate credential test call — the
+credential is validated by the first real request, so the first execution is
+also your auth check.
+
+> **Every request is billed to your own RapidAPI subscription.** A workflow on
+> a schedule spends real money on every run. Decide the call budget before you
+> enable the trigger, not after the invoice.
+
+---
+
+## Operations
+
+### Flight → Search One-Way
+
+`POST /api/google_flights/oneway/v1`
+
+**Required:** From Airport (IATA), To Airport (IATA), Departure Date
+(`YYYY-MM-DD`).
+
+**Options:** Airline Codes, Arrival Time Min/Max, Currency (default `USD`),
+Departure Time Min/Max, Exclude Airline Codes, Limit, Max Price, Max Stops,
+Passengers, Seat Type, Sort Type, Use External Proxy (default `true`), Use
+Fallback (default `false`, slower but better on hard routes).
+
+> **Known API defect, stated rather than hidden:** `sort_type` is accepted by
+> the one-way schema but is **not** applied to one-way searches. It does work on
+> round-trip. Sort one-way results yourself with a **Sort** node after this one.
+
+### Flight → Search Round-Trip
+
+`POST /api/google_flights/roundtrip/v1`
+
+**Required:** From Airport, To Airport, Departure Date, Return Date.
+
+**Options:** Currency, Limit, Max Departure Stops, Max Price, Max Return Stops,
+Outbound Airline Codes, Outbound Arrival Time Min/Max, Outbound Departure Time
+Min/Max, Outbound Exclude Airline Codes, Passengers, Return Airline Codes,
+Return Arrival Time Min/Max, Return Departure Time Min/Max, Return Exclude
+Airline Codes, Seat Type, Sort Type, Use External Proxy, Use Fallback.
+
+The "Outbound …" options map to the API's `departure_*` parameters; the
+"Return …" options map to the `return_*` parameters.
+
+### Hotel → Search Destination
+
+`POST /search`
+
+**Required:** Destination (free text — `Paris`, `Tokyo Shibuya`, `Hilton NYC`),
+Check-in Date, Check-out Date.
+
+**Options:** Adults (default `2`), Budget per Night, Children (default `0`),
+Currency (default `USD`), Filters, Proxy Country.
+
+**Filters** are picked from a fixed list: Accepts Online Payment, Adults Only,
+Air Conditioning, All Inclusive, All Meals Included, Breakfast and Dinner,
+Breakfast and Lunch, Breakfast Included, Free Cancellation, Free WiFi, Front
+Desk 24h, Gym, Parking, Pets Allowed, Private Bathroom, Review Score 7/8/9,
+Sauna, Stars 3/4/5, Swimming Pool, Very Good Breakfast.
+
+### Hotel → Get by Name
+
+`POST /hotel_by_name`
+
+**Required:** Hotel Name, Check-in Date, Check-out Date.
+
+**Options:** Adults, Area (disambiguates generic names), Children, Currency,
+Free Cancellation, Proxy Country.
+
+When the property is sold out for those dates the API returns
+`available: false` with null price fields. **That is a valid answer, not an
+error** — branch on `available` with an **If** node rather than treating it as
+a failure.
+
+### Field formats
+
+- All dates are plain `YYYY-MM-DD` strings.
+- **Airline code** fields take a comma-separated list (`LH,BA`) and are sent as
+  a JSON array.
+- **Passengers** takes comma-separated type codes, one per traveller:
+  `1` adult, `2` child, `3` infant on lap, `4` infant in seat. Two adults and a
+  child is `1,1,2`.
+- **Seat Type** offers Economy (`1`) and Business (`3`).
+- **Limit** follows the n8n convention and pre-fills `50`. Leave the option off
+  entirely and the API applies its own default of `10`.
+- The time-window options (`departure_time_min`, `departure_arrival_time_max`
+  and friends) are passed through to the API unchanged. Use the format shown on
+  the RapidAPI listing for those parameters.
+
+---
+
+## Working with the results
+
+### Fares go stale in minutes — never cache them
+
+Do not store a fare and reuse it on a later run, and do not build a workflow
+that reads a previous execution's price as if it were current. Re-run the
+search, and always record and display **when** the data was fetched. A cached
+fare is a wrong fare.
+
+### Flight responses
+
+Both flight operations return a **bare JSON array**, so this node emits one n8n
+item per itinerary. An empty result is `[]` with **HTTP 200** — that means "no
+flights on this route and date", not an error, and it produces zero output
+items. Guard downstream branches accordingly (for example with an **If** or
+**No Operation** path).
+
+Every one-way item carries, among other fields: `price`, `price_as_number`,
+`duration`, `duration_seconds`, `airline`, `stops`, `stops_info`,
+`departure_description`, `arrival_description`, `buy_link`.
+
+Round-trip items carry `total_price`, `total_price_as_number`,
+`total_duration_seconds`, `total_stops`, `buy_link`, plus per-leg fields
+prefixed `departure_flight_*` / `return_flight_*` and the
+`departure_stops_info` / `return_stops_info` arrays. Stop entries look like
+`{"stop_airport": "AUH", "stop_duration_seconds": 5700}` and the array is empty
+for non-stop.
+
+**The fields worth building on:** `price_insights_low`, `price_insights_high`
+and `price_range_in_relation_to_other_periods` (`low` | `typical` | `high`).
+They are the historical price range for that route and period, which is what
+lets a workflow say *"$209 is typical for this route, don't rush"* instead of
+just quoting a number.
+
+### Hotel responses
+
+**Search Destination** returns a single object per input item:
+`destination`, `checkin_date`, `checkout_date`, `applied_filters`,
+`budget_per_night`, and `properties` — an array of
+`{name, price_string, price, review_score, review_count, room_type, location,
+image_url, link}`. To get one n8n item per property, add a **Split Out** node on
+the `properties` field.
+
+**Get by Name** returns one object: `name`, `available`, `price_string`,
+`price`, `review_score`, `review_count`, `room_type`, `image_url`, `link`,
+`nights`, `adults`, `children`.
+
+### Proxy Country — the option most people miss
+
+`proxy_country` routes the request through a residential proxy in the country
+you name (a two-letter code such as `us`, `de`, `il`), so the same hotel and the
+same dates are priced the way a user in that country would see them. Fan a
+workflow out over several country codes and you have **rate-parity and
+geo-pricing monitoring**, which is a business use case rather than a hobby one.
+
+---
+
+## Compatibility
+
+- Requires Node.js **20.15 or newer**, matching current n8n requirements.
+- Built as a declarative-style node against `n8n-nodes-api-version 1`.
+- **Zero runtime dependencies.** `n8n-workflow` is a peer dependency supplied by
+  n8n itself.
+- Tested n8n versions: none recorded yet. If you hit an incompatibility, please
+  open an issue with your n8n version.
+
+---
+
+## Development
+
+```bash
+npm install
+npm run lint      # eslint-plugin-n8n-nodes-base, community ruleset
+npm run build     # tsc + gulp build:icons -> dist/
+```
+
+To try it in a local n8n instance:
+
+```bash
+npm run build
+npm link
+cd ~/.n8n/nodes && npm link n8n-nodes-flight-hotel-data
+```
+
+Publishing is handled by `.github/workflows/publish.yml`, which runs on a
+GitHub release and publishes with `--provenance`. Register that workflow as a
+**Trusted Publisher** in the npm package settings; no npm token is stored in the
+repository. Do not publish by hand — n8n's verification process requires a
+GitHub Action with a provenance statement.
+
+**Never commit a real key.** The credential field is the only place a RapidAPI
+key belongs; use `YOUR_RAPIDAPI_KEY` in docs, issues and screenshots.
+
+---
+
+## Resources
+
+- n8n community nodes documentation: <https://docs.n8n.io/integrations/community-nodes/>
+- Flights API listing: <https://rapidapi.com/mtnrabi/api/google-flights-live-api>
+- Hotels API listing: <https://rapidapi.com/mtnrabi/api/booking-live-api>
+
+## License
+
+[MIT](LICENSE)
