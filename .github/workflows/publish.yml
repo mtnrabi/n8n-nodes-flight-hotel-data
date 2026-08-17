@@ -20,7 +20,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: n8n-workflow pulls in isolated-vm, which declares
+          # engines.node >= 22 and fails to compile under node-gyp on 20.
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
