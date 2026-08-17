@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-flight-hotel-data",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "n8n community node for real-time flight and hotel pricing via the RapidAPI Flight & Hotel Data APIs. Independent API; not affiliated with, endorsed by, or sponsored by Google or Booking.com.",
   "keywords": [
     "n8n-community-node-package",
@@ -14,6 +14,7 @@
   "homepage": "https://github.com/mtnrabi/n8n-nodes-flight-hotel-data",
   "author": {
     "name": "mtnrabi",
+    "email": "mtnrabi@gmail.com",
     "url": "https://rapidapi.com/mtnrabi"
   },
   "repository": {

@@ -24,7 +24,10 @@ export class FlightHotelData implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Flight & Hotel Data',
 		name: 'flightHotelData',
-		icon: 'file:flightHotelData.svg',
+		icon: {
+			light: 'file:flightHotelData.svg',
+			dark: 'file:flightHotelData.dark.svg',
+		},
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',

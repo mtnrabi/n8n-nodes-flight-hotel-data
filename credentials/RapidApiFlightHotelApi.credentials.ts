@@ -1,6 +1,8 @@
 import type {
 	IAuthenticateGeneric,
+	ICredentialTestRequest,
 	ICredentialType,
+	Icon,
 	INodeProperties,
 } from 'n8n-workflow';
 
@@ -19,6 +21,11 @@ export class RapidApiFlightHotelApi implements ICredentialType {
 	name = 'rapidApiFlightHotelApi';
 
 	displayName = 'RapidAPI Flight & Hotel Data API';
+
+	icon: Icon = {
+		light: 'file:rapidApiFlightHotelApi.svg',
+		dark: 'file:rapidApiFlightHotelApi.dark.svg',
+	};
 
 	documentationUrl = 'https://rapidapi.com/mtnrabi/api/google-flights-live-api';
 
@@ -40,6 +47,28 @@ export class RapidApiFlightHotelApi implements ICredentialType {
 		properties: {
 			headers: {
 				'x-rapidapi-key': '={{$credentials.apiKey}}',
+			},
+		},
+	};
+
+	/**
+	 * `GET /isalive` on the hotels host is the cheapest published endpoint on
+	 * either API: no body, no search, and it is documented on the RapidAPI
+	 * listing. A wrong key is rejected by the RapidAPI gateway before it ever
+	 * reaches the backend, so this tells the user "your key works" without
+	 * running a real flight or hotel search.
+	 *
+	 * The host header has to be set here as well as in the node, because
+	 * `authenticate` only injects the key and the two APIs sit on different
+	 * hosts.
+	 */
+	test: ICredentialTestRequest = {
+		request: {
+			baseURL: 'https://booking-live-api.p.rapidapi.com',
+			url: '/isalive',
+			method: 'GET',
+			headers: {
+				'x-rapidapi-host': 'booking-live-api.p.rapidapi.com',
 			},
 		},
 	};
